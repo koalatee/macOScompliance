@@ -348,7 +348,8 @@ if [ $userChoose = 0 ]; then
             -heading "Software Updates" \
             -button1 "OK" \
             -defaultButton 1 &
-        $jamf policy -event $trigger_software_updates       
+        $jamf policy -event $trigger_software_updates 
+        exit 0
     elif [[ ${local_groups_failed[@]} =~ $array_macOS ]]; then
         /bin/echo "Running jamf trigger for $array_macOS."
         /bin/echo "$array_software updates may need to be run after the installer."
