@@ -12,7 +12,7 @@ This policy checks which smart group this computer is a part of, and checks loca
 ## Requirements:
 
 ### 1. jamf
-:kappa:
+¯\_(ツ)_/¯
 
 ### 2. jamf account for the API:
 This account needs READ access to Smart Groups.
