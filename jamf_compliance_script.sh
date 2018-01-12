@@ -277,25 +277,14 @@ fi
 
 ### Display to users what they passed, what they didn't
 # If machine is compliant, but some backend error exists
-if [[ -z ${local_groups_failed[@]} ]] && [[ -z ${sg_groups_failed[@]} ]]; then
+if [[ -z ${local_groups_failed[@]} ]]; then
         # Computer not in smart groups and local is fine (error)
-        /bin/echo "Compliant on mac and in jamf."
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$complianticon" \
-            -description "$mac_now_compliant" \
-            -heading "Compliant" \
-            -button1 "Exit" \
-            -defaultButton 1 &
-        exit 0
-    elif [[ -z ${local_groups_failed[@]} ]] && [[ ! -z ${sg_groups_passed[@]} ]]; then
-        # Computer is in a smart group but is locally fine (inventory needed)
-        /bin/echo "Compliant but smart group needs updating"
+        /bin/echo "Compliant on mac, fixing in jamf with inventory update."
         $jamf recon &
         "$jamfHelper" \
             -windowType utility \
             -icon "$complianticon" \
-            -description "$mac_now_compliant" \
+            -description "$mac_now_compliant." \
             -heading "Compliant" \
             -button1 "Exit" \
             -defaultButton 1 &
