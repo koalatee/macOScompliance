@@ -58,7 +58,6 @@
 # 07: machine error with macOS version
 # 08: machine error with software updates
 # 09: machine is not compliant and user opted to fix themselves
-# 10: machine somehow made it to the end of the script
 ######################## End Readme ########################
 
 ##### Variables #####
@@ -119,6 +118,7 @@ downloadicon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/G
 filevault_user_error="You are not a member of the Filevault users. Please contact $it_contact for assistance in resolving."
 mac_now_compliant="Your machine is now compliant."
 generic_error="An unexpected error has occurred. Please contact $it_contact."
+logout_message="Save all open work. Press Log Out to immediately logout and start encryption"
 software_upgrade_message="Downloading and installing software updates from Apple. When ready to install, a restart message will pop-up."
 manualfix_message="Check Software Center (under the update category) to resolve compliance issues. If you have any questions, contact $it_contact"
 macos_upgrade_message="Running installer for macOS updater. This will upgrade your Mac to macOS $req_os. 
@@ -148,6 +148,13 @@ checkParam "$trigger_filevault_rekey" "trigger_filevault_rekey"
 checkParam "$trigger_macOS_installer" "trigger_macOS_installer"
 checkParam "$trigger_software_updates" "trigger_software_updates"
 checkParam "$trigger_encryption" "trigger_encryption"
+
+# Exit cleanup (if a machine only needs to start encryption)
+function cleanup()
+{
+    ## Logs out and prompts for filevault
+    launchctl bootout gui/$(id -u $logged_in_user)
+}
 
 # Check smart group to see if a member
 # run as SmartGroupCheck "$display_name" "$sg_id_variable"
@@ -363,6 +370,14 @@ if [ $userChoose = 0 ]; then
         $jamf policy -event $trigger_macOS_installer &
         exit 0
     fi
+    "$jamfHelper" \
+        -windowType utility \
+        -icon "$noncomplianticon" \
+        -description "$logout_message" \
+        -heading "Warning: Save all Work!" \
+        -button1 "Log Out" \
+        -defaultButton 1
+    trap cleanup EXIT
 fi
 
-exit 10
+exit 0
