@@ -1,4 +1,4 @@
-# macOScompliance
+# macOS compliance
 Compliance check for macOS.
 
 This was written to help with some compliance. (wow, so descriptive)
