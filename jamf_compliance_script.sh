@@ -256,7 +256,7 @@ local_groups_pass=$(echo ${local_groups_passed[@]} |sed -e 's/ /, /g')
 # This first user check sees if the logged in account is already authorized with FileVault 2
 # re-keys filevault key before continuing
 fv_users="$(/usr/bin/fdesetup list)"
-if [[ ${local_groups_passed[@]} =~ $array_encryption ]]; then
+if [[ $FVSTATUS =~ "Filevault is On" ]]; then
     if ! egrep -q "^${logged_in_user}," <<< "$fv_users"; then
         /bin/echo "$logged_in_user is not on the list of FileVault enabled users:"
         /bin/echo "$fv_users"
