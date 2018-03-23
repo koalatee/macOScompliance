@@ -2,6 +2,7 @@
 # jjourney / @koalatee 01/2018
 
 ### compliance reporting check:
+# - antivirus installed
 # - macOS operating system version
 #    - smart group (set by IT/security - full build e.g. 10.12.6)
 # - encryption status
@@ -10,21 +11,26 @@
 
 ### Later goal (or second project)
 # - Application version checks (maybe in conjunction with patch policies)
+# - Add software update code from https://github.com/koalatee/scripts/blob/master/macOS/AppleUpdates_public.sh 
 
 ######################## Readme ########################
 # Check readme on front page: https://github.com/koalatee/macOScompliance
 # For use with jamf 
 # jamf requirements:
+# - Antivirus installed
 # - api account with READ access to 'Patch Reporting Software Titles'
 #   - update the salt and passphrase below
 #   - see https://github.com/jamfit/Encrypted-Script-Parameters for more information
+#
 # Required smart groups:
 # - Operating System like {full OS version} (e.g. 10.12.6)
 # - Has software updates available (whether )
 # - encryption status
 #   - update smart group IDs below
 # - compliance fail = member of any of the above groups
-# Required policies with custom triggers (for use with parameter 8-11):
+#
+# Required policies with custom triggers (for use with parameter 7-11):
+# - install antivirus
 # - re-key Filevault
 #   - personally using https://github.com/homebysix/jss-filevault-reissue
 # - macOS installer 
@@ -33,6 +39,7 @@
 #   - personally using jamf built-in software update
 # - start encryption
 #   - update triggers below
+#
 # Update it_contact
 # Update jamfURL with your jamf url (e.g. https://yourjamf.com:8443)
 # Update macos_upgrade_message if you don't want it to say "backup to Dropbox"
@@ -43,7 +50,7 @@
 # 05: api account password encrypted string
 # 06: full macOS version to check (e.g. 10.12.6) 
 #   - should correspond with the smart group
-# 07: 
+# 07: jamf custom trigger for AV install
 # 08: jamf custom trigger for filevault rekey
 # 09: jamf custom trigger for macOS installer
 # 10: jamf custom trigger for software updates
@@ -64,18 +71,21 @@
 # editable
 jamfURL="https://your.jamf.here:8443" # <--- update here
 it_contact="IT" # <--- update here
+av_name="" # <--- update here. should echo what jamf picks up in recon / your smart group
 
 ## jamf smart group ID numbers
 # editable
 sg_Full_OS= # <--- update here
 sg_software= # <--- update here
 sg_encryption= # <--- update here
+sg_antivirus= # <--- update here
 
 ## Display name for array and user, recommend no spaces
 # editable
 array_macOS="macOS"
 array_software="software"
 array_encryption="encryption" 
+array_antivirus="antivirus"
 
 ## Function for api account string decryption
 function DecryptString() {
@@ -93,6 +103,7 @@ req_os="${6}"
 req_os_maj="$(/bin/echo "$req_os" | /usr/bin/cut -d . -f 2)"
 req_os_min="$(/bin/echo "$req_os" | /usr/bin/cut -d . -f 3)"
 
+trigger_antivirus="${7}"
 trigger_filevault_rekey="${8}"
 trigger_macOS_installer="${9}"
 trigger_software_updates="${10}"
@@ -144,6 +155,7 @@ if [[ -z "$1" ]]; then
 fi
 }
 
+checkParam "$trigger_antivirus" "trigger_antivirus"
 checkParam "$trigger_filevault_rekey" "trigger_filevault_rekey"
 checkParam "$trigger_macOS_installer" "trigger_macOS_installer"
 checkParam "$trigger_software_updates" "trigger_software_updates"
@@ -153,6 +165,7 @@ checkParam "$trigger_encryption" "trigger_encryption"
 function cleanup()
 {
     ## Logs out and prompts for filevault
+    sleep 5s
     launchctl bootout gui/$(id -u $logged_in_user)
 }
 
@@ -185,9 +198,20 @@ function SmartGroupCheck () {
 SmartGroupCheck $array_encryption $sg_encryption
 SmartGroupCheck $array_macOS $sg_Full_OS
 SmartGroupCheck $array_software $sg_software
+SmartGroupCheck $array_antivirus $sg_antivirus
 
 echo "Machine smart groups passed: "${sg_groups_passed[@]}""
 echo "Machine smart groups failed: "${sg_groups_failed[@]}""
+
+### Antivirus checks
+LOCAL_AV="$(ls /Applications |grep "$av_name")"
+if [[ -z "$LOCAL_AV" ]]; then
+    /bin/echo "$av_name not found"
+    local_groups_failed+=($array_antivirus)
+else
+    /bin/echo "$LOCAL_AV found"
+    local_groups_passed+=($array_antivirus)
+fi
 
 ### Filevault checks
 # Check to see if the encryption process is complete
@@ -331,6 +355,21 @@ fi
 # User has opted to fix now
 if [ $userChoose = 0 ]; then
     /bin/echo "Fixing compliance issues with: ${local_groups_failed[@]}"
+    if [[ ${local_groups_failed[@]} = $array_antivirus ]]; then
+        /bin/echo "Antivirus is only failure. Running jamf trigger for $array_antivirus and exiting."
+        $jamf policy -event $trigger_antivirus
+        "$jamfHelper" \
+            -windowType utility \
+            -icon "$complianticon" \
+            -description "$mac_now_compliant" \
+            -heading "Compliant" \
+            -button1 "Exit" \
+            -defaultButton 1 &
+        exit 0
+    elif [[ ${local_groups_failed[@]} =~ $array_antivirus ]]; then
+        /bin/echo "Running jamf trigger for $array_encryption and continuing."
+        $jamf policy -event $trigger_antivirus
+    fi
     if [[ ${local_groups_failed[@]} =~ $array_encryption ]]; then
         /bin/echo "Running jamf trigger for $array_encryption."
         $jamf policy -event $trigger_encryption
