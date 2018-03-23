@@ -30,7 +30,7 @@
 # - compliance fail = member of any of the above groups
 #
 # Required policies with custom triggers (for use with parameter 7-11):
-# - install antivirus
+# - install antivirus 
 # - re-key Filevault
 #   - personally using https://github.com/homebysix/jss-filevault-reissue
 # - macOS installer 
