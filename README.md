@@ -4,7 +4,7 @@ Compliance check for macOS.
 This was written to help with some compliance. (wow, so descriptive)
 
 ## What does this do?
-If a mac is a member of any of the smart groups (not on the $company approved macOS version, has software updates from app store, or is not encrypted) they will see this policy.
+If a mac is a member of any of the smart groups (not on the $company approved macOS version, has software updates from app store, is not encrypted, does not have antivirus installed) they will see this policy.
 This script double-checks which smart group this computer is a part of, and checks locally if it should be in those smart groups (to ensure accuracy) and acts accordingly.
 
 <i>e.g. If a user is encrypted, but is on an old version of macOS and has software updates, they'll be prompted to upgrade macOS. If a user is on a current version (major) of macOS but is not encrypted and requires software updates, encryption will trigger and software updates will be run.</i>
