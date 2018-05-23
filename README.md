@@ -5,7 +5,7 @@ This was written to help with some compliance. (wow, so descriptive)
 
 ## What does this do?
 If a mac is a member of any of the smart groups (not on the $company approved macOS version, has software updates from app store, or is not encrypted) they will see this policy.
-This policy checks which smart group this computer is a part of, and checks locally if it should be in those smart groups and acts accordingly.
+This script double-checks which smart group this computer is a part of, and checks locally if it should be in those smart groups (to ensure accuracy) and acts accordingly.
 
 <i>e.g. If a user is encrypted, but is on an old version of macOS and has software updates, they'll be prompted to upgrade macOS. If a user is on a current version (major) of macOS but is not encrypted and requires software updates, encryption will trigger and software updates will be run.</i>
 
@@ -23,9 +23,9 @@ Use https://github.com/jamfit/Encrypted-Script-Parameters for more information o
 ### 3. Smart Groups:
 1. Operating System {like} $full_os_version - you can set the macOS version you want to be 'compliant' (e.g. 10.12.6) - this should equal the version in your macOS upgrade policy.
 2. Has Software Updates available - either use an EA or jamf built-in.
-3. Machine not encrypted - use your discretion on the best way to check this.
-4. Machine does not have antivirus installed 
-4. Computer Group {member of} $above_group1 [or] Computer Group {member of} $above_group2 [or] Computer Group {member of} $above_group3 [or] Computer Group {member of} $above_group4.
+3. Machine not encrypted - use your discretion on the best way to check this. I use https://github.com/koalatee/scripts/blob/master/jamf/EAs/accurate%20FV%20reporting.sh to set an EA that is used for Smart Groups.
+4. Machine does not have antivirus installed. 
+4. Scope this script to Computer Group {member of} $above_group1 [or] Computer Group {member of} $above_group2 [or] Computer Group {member of} $above_group3 [or] Computer Group {member of} $above_group4.
 
 <i>Note the ids of the first 4, as they are needed for the script. 
 You can find these in the url - https://your.jamf.here:8443/smartComputerGroups.html?<b>id=64</b>&o=r&nav=null</i>
@@ -43,7 +43,7 @@ May copy code from https://github.com/koalatee/scripts/blob/master/macOS/AppleUp
 2. Update the following values (required):
 - jamfURL
 - it_contact
-- smart group IDs (sg_Full_OS, sg_encryption, sg_encryption)
+- smart group IDs (sg_Full_OS, sg_encryption, sg_encryption, sg_antivirus)
 - apiUser salt and passphrase
 - apiPass salt and passphrase
 3. Update the following values/variables (optional):
