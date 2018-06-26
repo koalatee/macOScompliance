@@ -340,7 +340,7 @@ if [[ ! -z ${local_groups_failed[@]} ]]; then
             -button2 "Fix manually" \
             -defaultButton 1 )"
     fi
-    if [ $userChoose = 2 ]; then
+    if [[ $userChoose = 2 ]]; then
         "$jamfHelper" \
             -windowType utility \
             -icon "$manualfixicon" \
@@ -353,7 +353,7 @@ if [[ ! -z ${local_groups_failed[@]} ]]; then
 fi
 
 # User has opted to fix now
-if [ $userChoose = 0 ]; then
+if [[ $userChoose = 0 ]]; then
     /bin/echo "Fixing compliance issues with: ${local_groups_failed[@]}"
     if [[ ${local_groups_failed[@]} = $array_antivirus ]]; then
         /bin/echo "Antivirus is only failure. Running jamf trigger for $array_antivirus and exiting."
