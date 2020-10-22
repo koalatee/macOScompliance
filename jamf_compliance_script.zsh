@@ -1,5 +1,11 @@
-#!/bin/bash 
+#!/bin/zsh 
 # jjourney / @koalatee 01/2018
+
+# modified 10/2020
+# - moved to zsh 
+# - support for macOS 11
+# - removed jamfHelper, moved to osascript
+#   - recommend a PPPC profile for terminal to control system events
 
 ### compliance reporting check:
 # - antivirus installed
@@ -57,14 +63,13 @@
 # 11: jamf custom trigger for encryption Policy
 #
 # Exit Codes
-# 00: machine running updates or is now compliant
+# 00: machine running updates (major or minor), is now compliant, or user opted to solve themselves
 # 02: error with parameters
 # 03: API error
 # 04: user is not in fv users
 # 06: machine error with filevault status
 # 07: machine error with macOS version
 # 08: machine error with software updates
-# 09: machine is not compliant and user opted to fix themselves
 ######################## End Readme ########################
 
 ##### Variables #####
@@ -72,6 +77,8 @@
 jamfURL="https://your.jamf.here:8443" # <--- update here
 it_contact="IT" # <--- update here
 av_name="" # <--- update here. should echo what jamf picks up in recon / your smart group
+LOCAL_AV="$(ls /Applications |grep "$av_name")" # <--- update here if your AV is stored in a different location 
+storage_location="" # <--- where do you recommend users store/backup their important documents
 
 ## jamf smart group ID numbers
 # editable
@@ -100,6 +107,7 @@ apiPass=$(DecryptString $5 '$apiPassSalt' '$apiPassPassphrase') # <--- update he
 ##### jamf Script Parameters #####
 ## Do not edit
 req_os="${6}"
+req_osversion="$(/bin/echo "$req_os" | /usr/bin/cut -d . -f 1)"
 req_os_maj="$(/bin/echo "$req_os" | /usr/bin/cut -d . -f 2)"
 req_os_min="$(/bin/echo "$req_os" | /usr/bin/cut -d . -f 3)"
 
@@ -108,22 +116,23 @@ trigger_filevault_rekey="${8}"
 trigger_macOS_installer="${9}"
 trigger_software_updates="${10}"
 trigger_encryption="${11}"
-## Local variables to determine paths, OS version, disk space, udid, and power connection
+
+## Local variables to determine paths, OS version
 # Do not edit     
 local_os="$(/usr/bin/sw_vers -productVersion)"
+local_osversion="$(/usr/bin/sw_vers -productVersion | /usr/bin/cut -d . -f 1)"
 local_os_maj="$(/usr/bin/sw_vers -productVersion | /usr/bin/cut -d . -f 2)"
 local_os_min="$(/usr/bin/sw_vers -productVersion | /usr/bin/cut -d . -f 3)"
-jamfHelper="/Library/Application Support/JAMF/bin/jamfHelper.app/Contents/MacOS/jamfHelper"
 jamf="/usr/local/bin/jamf"
 serialNumber="$(system_profiler SPHardwareDataType | awk '/Serial/ {print $4}')"
-logged_in_user="$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')"
-## icons
-# editable
-filevaulticon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/FileVaultIcon.icns"
-complianticon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/com.apple.macbook-retina-space-gray.icns"
-noncomplianticon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/AlertStopIcon.icns"
-manualfixicon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/AlertCautionIcon.icns"
-downloadicon="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericNetworkIcon.icns"
+logged_in_user="$( scutil <<< "show State:/Users/ConsoleUser" | awk -F': ' '/[[:space:]]+Name[[:space:]]:/ { if ( $2 != "loginwindow" ) { print $2 }}')"
+# xpath on macOS 11 requires -e 
+if [[ $local_osversion -eq "10" ]]; then
+    xpathcode="xpath"
+else
+    xpathcode="xpath -e"
+fi
+
 ## Messages to users
 # editable
 filevault_user_error="You are not a member of the Filevault users. Please contact $it_contact for assistance in resolving."
@@ -134,7 +143,7 @@ software_upgrade_message="Downloading and installing software updates from Apple
 manualfix_message="Check Software Center (under the update category) to resolve compliance issues. If you have any questions, contact $it_contact"
 macos_upgrade_message="Running installer for macOS updater. This will upgrade your Mac to macOS $req_os. 
 Before proceeding:
-- Please ensure *all work is saved* - important documents and files should be saved to Dropbox. 
+- Please ensure *all work is saved* - important documents and files should be saved to $storage_location. 
 - Contact $it_contact with any questions on backing up.
 - Close any apps you may have open.
 - This process will take 45 minutes to complete, during which time you will *not* be able to use your Mac"
@@ -144,13 +153,10 @@ Before proceeding:
 checkParam (){
 if [[ -z "$1" ]]; then
     /bin/echo "\$$2 is empty and required. Please fill in the JSS parameter correctly."
-    "$jamfHelper" \
-        -windowType utility \
-        -icon "$alerticon" \
-        -heading "Error" \
-        -description "$generic_error" \
-        -button1 "Exit" \
-        -defaultButton 1 &
+    OneButtonInfoBox \
+        "$generic_error" \
+        "ERROR" \
+        "EXIT" &
     exit 2
 fi
 }
@@ -180,7 +186,7 @@ function SmartGroupCheck () {
         -u ${apiUser}:${apiPass} \
         -X GET $jamfURL/JSSResource/computergroups/id/"${2}" \
         -H "Accept: application/xml" \
-        | xpath "/computer_group/computers/computer[serial_number = '$serialNumber']"
+        | $(echo $xpathcode) "/computer_group/computers/computer[serial_number = '$serialNumber']"
     )"
     if [ -z "$smartCheck" ]; then
         echo "Not a member of the "${1}" group."
@@ -204,7 +210,6 @@ echo "Machine smart groups passed: "${sg_groups_passed[@]}""
 echo "Machine smart groups failed: "${sg_groups_failed[@]}""
 
 ### Antivirus checks
-LOCAL_AV="$(ls /Applications |grep "$av_name")"
 if [[ -z "$LOCAL_AV" ]]; then
     /bin/echo "$av_name not found"
     local_groups_failed+=($array_antivirus)
@@ -238,6 +243,10 @@ fi
 # Check current macOS version against required version
 if [ $local_os = $req_os ]; then
         /bin/echo "macOS version is up-to-date"
+        /bin/echo "Mac running $local_os"
+        local_groups_passed+=($array_macOS)
+    elif [ $local_osversion -gt $req_osversion ]; then
+        /bin/echo "Mac on higher version that required"
         /bin/echo "Mac running $local_os"
         local_groups_passed+=($array_macOS)
     elif [ $local_os_maj -gt $req_os_maj ]; then
@@ -284,13 +293,10 @@ if [[ $FVSTATUS =~ "Filevault is On" ]]; then
     if ! egrep -q "^${logged_in_user}," <<< "$fv_users"; then
         /bin/echo "$logged_in_user is not on the list of FileVault enabled users:"
         /bin/echo "$fv_users"
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$filevaulticon" \
-            -heading "FileVault Error" \
-            -description "$filevault_user_error" \
-            -button1 "Exit" \
-            -defaultButton 1 &
+        OneButtonInfoBox \
+            "$filevault_user_error" \
+            "FileVault Error" \
+            "EXIT" &
         exit 4
     else 
         /bin/echo "running FileVault rekey"
@@ -305,67 +311,44 @@ if [[ -z ${local_groups_failed[@]} ]]; then
         # Computer not in smart groups and local is fine (error)
         /bin/echo "Compliant on mac, fixing in jamf with inventory update."
         $jamf recon &
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$complianticon" \
-            -description "$mac_now_compliant." \
-            -heading "Compliant" \
-            -button1 "Exit" \
-            -defaultButton 1 &
+        OneButtonInfoBox \
+            "$mac_now_compliant" \
+            "Compliant" \
+            "Complete" &
         exit 0
 fi
 
 # If machine is not compliant, failed a local check
 if [[ ! -z ${local_groups_failed[@]} ]]; then
-    # jamfHelper exit codes
-    # https://gist.github.com/homebysix/18c1a07a284089e7f279
-    # 2 is button2 - 'fix manually'
-    # 0 is button1 - 'fix now'
     if [[ -z ${local_groups_passed[@]} ]]; then
-        userChoose="$("$jamfHelper" \
-            -windowType utility \
-            -icon "$noncomplianticon" \
-            -description "Your mac has failed compliance in all areas: $local_groups_fail. You can fix now or fix manually. All updates will require a restart and may take some time." \
-            -heading "Non Compliant Mac" \
-            -button1 "Fix now" \
-            -button2 "Fix manually" \
-            -defaultButton 1 )"
-    else 
-        userChoose="$("$jamfHelper" \
-            -windowType utility \
-            -icon "$noncomplianticon" \
-            -description "Your mac is compliant with $local_groups_pass, but does not meet compliance with $local_groups_fail. You can fix now or fix manually. All updates will require a restart and may take some time." \
-            -heading "Non Compliant Mac" \
-            -button1 "Fix now" \
-            -button2 "Fix manually" \
-            -defaultButton 1 )"
+        userChoose="$(TwoButtonInfoBox \
+            "Your mac has failed compliance in all areas: $local_groups_fail. You can fix now or fix manually. All updates will require a restart and may take some time." \
+            "Non Compliant Mac" \
+            "Fix Manually" \
+            "Fix Now" )"
+    else
+        userChoose="$(TwoButtonInfoBox \
+            "Your mac is compliant with $local_groups_pass, but does not meet compliance with $local_groups_fail. You can fix now or fix manually. All updates will require a restart and may take some time." \
+            "Non Compliant Mac" \
+            "Fix Manually" \
+            "Fix Now" )"
     fi
-    if [[ $userChoose = 2 ]]; then
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$manualfixicon" \
-            -description "$manualfix_message" \
-            -heading "Manual Fix" \
-            -button1 "OK" \
-            -defaultButton 1 &
+    if [[ $userChoose = "Fix Manually" ]]; then
+        OneButtonInfoBox \
+            "$manualfix_message" \
+            "Manual Fix" \
+            "OK"
         exit 9
     fi
 fi
 
 # User has opted to fix now
-if [[ $userChoose = 0 ]]; then
+if [[ $userChoose = "Fix Now" ]]; then
     /bin/echo "Fixing compliance issues with: ${local_groups_failed[@]}"
     if [[ ${local_groups_failed[@]} = $array_antivirus ]]; then
         /bin/echo "Antivirus is only failure. Running jamf trigger for $array_antivirus and exiting."
         $jamf policy -event $trigger_antivirus
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$complianticon" \
-            -description "$mac_now_compliant" \
-            -heading "Compliant" \
-            -button1 "Exit" \
-            -defaultButton 1 &
-        exit 0
+        $jamf recon
     elif [[ ${local_groups_failed[@]} =~ $array_antivirus ]]; then
         /bin/echo "Running jamf trigger for $array_encryption and continuing."
         $jamf policy -event $trigger_antivirus
@@ -376,35 +359,27 @@ if [[ $userChoose = 0 ]]; then
     fi
     if [[ ${local_groups_passed[@]} =~ $array_macOS ]] && [[ ${local_groups_failed[@]} =~ $array_software ]]; then
         /bin/echo "Running jamf trigger for $array_software."
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$downloadicon" \
-            -description "$software_upgrade_message" \
-            -heading "Software Updates" \
-            -button1 "OK" \
-            -defaultButton 1 &
-        $jamf policy -event $trigger_software_updates 
-        exit 0
+        OneButtonInfoBox \
+            "$software_upgrade_message" \
+            "Software Updates" \
+            "OK" &
+        $jamf policy -event $trigger_software_updates     
+        exit 0  
     elif [[ ${local_groups_failed[@]} =~ $array_macOS ]]; then
         /bin/echo "Running jamf trigger for $array_macOS."
         /bin/echo "$array_software updates may need to be run after the installer."
-        "$jamfHelper" \
-            -windowType utility \
-            -icon "$manualfixicon" \
-            -description "$macos_upgrade_message" \
-            -heading "Upgrade macOS" \
-            -button1 "OK" \
-            -defaultButton 1 
+        OneButtonInfoBox \
+            "$macos_upgrade_message" \
+            "Upgrade macOS" \
+            "OK" &
         $jamf policy -event $trigger_macOS_installer &
         exit 0
     fi
-    "$jamfHelper" \
-        -windowType utility \
-        -icon "$noncomplianticon" \
-        -description "$logout_message" \
-        -heading "Warning: Save all Work!" \
-        -button1 "Log Out" \
-        -defaultButton 1
+    # restart to make the user feel more like something happened
+    OneButtonInfoBox \
+        "$logout_message" \
+        "WARNING: Save All Work" \
+        "Restart"
     trap cleanup EXIT
 fi
 
